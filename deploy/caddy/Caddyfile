@@ -1,0 +1,98 @@
+# ---------------------------------------------------------------------------
+# Proxy inverso
+# ---------------------------------------------------------------------------
+# ADVERTENCIA HONESTA: este archivo NO se probó. En el entorno donde se escribió
+# el código no había Docker. Ver docs/10-PRUEBAS-Y-ESTADO.md.
+#
+# EL DOMINIO NO ESTÁ PUESTO A PROPÓSITO
+# --------------------------------------
+# `{DOMINIO}` hay que reemplazarlo por el dominio real de la escuela antes de
+# arrancar. No se puso un dominio de ejemplo porque un dominio inventado en
+# producción falla de una forma difícil de diagnosticar: el certificado nunca
+# se emite y el error apunta a la red, no a la configuración.
+#
+# Caddy se eligió porque obtiene y renueva los certificados por su cuenta. Eso
+# evita mantener un proceso de renovación aparte, que es la parte que más falla
+# en la práctica.
+# ---------------------------------------------------------------------------
+
+{
+	# Correo para los avisos de caducidad del certificado. Hay que poner uno
+	# real: sin esto, Caddy avisa por la salida estándar y nadie lo lee.
+	email {$ACME_CORREO:}
+
+	# No se publica el detalle de los certificados en la consola.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+# Redirección de todo el tráfico a HTTPS.
+{$DOMINIO}, www.{$DOMINIO} {
+	redir https://{$DOMINIO}{uri} permanent
+}
+
+{$DOMINIO} {
+	encode zstd gzip
+
+	# Cabeceras de seguridad. Se agregan en todas las respuestas, incluidas las
+	# de error.
+	header {
+		# La interfaz ya envía algunas de estas; repetirlas aquí es la red de
+		# seguridad que no depende de que la interfaz no se equivoque.
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Es una aplicación interna: no se indexa nunca.
+		X-Robots-Tag "noindex, nofollow, noarchive"
+
+		# La política de allowable-origin impide que otra pestaña del navegador
+		# ejecute peticiones con la sesión de esta persona. Una aplicación que
+		# muestra datos de menores necesita esto.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'"
+		# Se quita el tipo de contenido que algunos navegadores incluyen por
+		# omisión y que permite a un atacante inferir con qué está hecho.
+		X-Permitted-Cross-Domain-Policies "none"
+		-Server
+	}
+
+	# -----------------------------------------------------------------------
+	# API
+	# -----------------------------------------------------------------------
+	# Todo el ingreso va por acá, porque en la API el ingreso está bajo
+	# /api/v1/auth. La API nunca se expone directamente al público: va por el
+	# servidor de la interfaz, para que la cookie de sesión nunca salga de la red
+	# interna.
+	handle /api/* {
+		reverse_proxy web:3000
+	}
+
+	# -----------------------------------------------------------------------
+	# Sondeo de salud
+	# -----------------------------------------------------------------------
+	# El sondeo NO va a la API ni a la interfaz. Va al propio Caddy, que
+	# responde sin tocar la aplicación.
+	#
+	# La razón es práctica: si el sondeo dependiera de la API, una caída de la
+	# base de datos provocaría que el orquestador reiniciara el proxy, que es
+	# justo lo contrario de lo que hay que hacer en ese caso. Con este
+	# sondeo, una caída de la base deja la interfaz en pie mostrando un error y
+	# el diagnóstico es claro.
+	handle /salud {
+		respond "ok" 200
+	}
+
+	# -----------------------------------------------------------------------
+	# Interfaz
+	# -----------------------------------------------------------------------
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		# El registro normal no guarda cuerpos ni cabeceras de autenticación.
+		output stdout
+		format json
+	}
+}

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Configuracion de PHPUnit de la Escuela de Musica y Arte.
+
+    Las suites estan separadas porque son capas distintas:
+
+      - Aislamiento: que una escuela no vea los datos de otra. Lo impone la
+        Row Level Security de PostgreSQL, no el codigo.
+      - Agenda: que dos clases no ocupen al mismo docente o la misma sala a la
+        misma hora. Eso NO lo impone la base: es una regla de la escuela.
+      - Planes: que la asistencia consuma la clase del plan segun la regla
+        configurada, ni una mas ni una menos.
+      - Recuperacion: que la clase recuperada caduque cuando corresponde.
+
+    Son cosas distintas y es facil creer que una cubre a las otras. No lo hace.
+
+    POR QUE LA CONEXION ESTA FIJA A PostgreSQL
+    ------------------------------------------
+    El aislamiento entre escuelas esta implementado con Row Level Security, que
+    es una funcion de PostgreSQL. En SQLite las pruebas de aislamiento pasarian
+    sin comprobar nada: darian verde con una base que no tiene RLS. La variable
+    se fija aqui y NO se lee del `.env`, para que nadie la cambie por descuido
+    y convierta la suite en un espejismo.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache"
+         failOnWarning="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+            <exclude>tests/Feature/Aislamiento</exclude>
+            <exclude>tests/Feature/Agenda</exclude>
+            <exclude>tests/Feature/Planes</exclude>
+            <exclude>tests/Feature/Recuperacion</exclude>
+        </testsuite>
+        <testsuite name="Aislamiento">
+            <directory>tests/Feature/Aislamiento</directory>
+        </testsuite>
+        <testsuite name="Agenda">
+            <directory>tests/Feature/Agenda</directory>
+        </testsuite>
+        <testsuite name="Planes">
+            <directory>tests/Feature/Planes</directory>
+        </testsuite>
+        <testsuite name="Recuperacion">
+            <directory>tests/Feature/Recuperacion</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <!--
+            Las tres reglas que este sistema NO inventa. Si en pruebas estan
+            vacias, las pruebas del comportamiento "regla definida" se saltan y
+            queda constancia en el nombre del caso. Ver docs/10.
+        -->
+        <env name="ESCUELA_MUSICA_ABSENCIA_CONSUME_PLAN" value=""/>
+        <env name="ESCUELA_MUSICA_DIAS_RECUPERACION" value=""/>
+        <env name="ESCUELA_MUSICA_DIAS_AVISO_MOROSIDAD" value=""/>
+        <env name="ESCUELA_MUSICA_RETENCION_BITACORA_HORAS" value="8760"/>
+        <env name="ESCUELA_MUSICA_ROLES_QUE_VEN_PAGOS" value="direccion,administracion"/>
+        <env name="ESCUELA_MUSICA_POR_PAGINA_MAXIMO" value="100"/>
+        <!--
+            Base de datos de pruebas: PostgreSQL obligatoriamente. Ver la nota
+            de arriba sobre por que SQLite serviria de espejo.
+        -->
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_DATABASE" value="escuela_musica_test"/>
+    </php>
+</phpunit>

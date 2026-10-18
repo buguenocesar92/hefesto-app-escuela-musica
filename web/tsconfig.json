@@ -1,0 +1,8 @@
+{
+  "//": "Archivo de configuracion de TypeScript. Lo genera Nuxt en `nuxt prepare`; el repositorio lo versiona para que el editor no dependa de haber corrido la instalacion.",
+  "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  }
+}

@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# Secretos y entorno
+# ---------------------------------------------------------------------------
+# `.env` real nunca se versiona. La plantilla sí.
+.env
+.env.*
+!.env.example
+
+# El archivo de producción con las claves del despliegue.
+.env.prod
+.env.prod.*
+
+# ---------------------------------------------------------------------------
+# Dependencias y artefactos
+# ---------------------------------------------------------------------------
+node_modules/
+vendor/
+.nuxt/
+.output/
+.data/
+.nitro/
+.cache/
+
+# ---------------------------------------------------------------------------
+# Sistema operativo y editores
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ---------------------------------------------------------------------------
+# Respaldos
+# ---------------------------------------------------------------------------
+# Los respaldos nunca van al repositorio: pueden contener todos los alumnos,
+# con su nombre, su RUT y su dirección.
+respaldos/
+*.dump
+*.sql.gz
+manifiesto.sha256
+
+# ---------------------------------------------------------------------------
+# Archivos
+# ---------------------------------------------------------------------------
+# Los archivos ZIP los genera quien hace la entrega, no esta aplicación.
+*.zip

@@ -1,0 +1,239 @@
+/* ---------------------------------------------------------------------------
+   Estilos de la Escuela de Música y Arte
+   ---------------------------------------------------------------------------
+   Pocos estilos y globales a propósito: la aplicación se usa en una pantalla de
+   recepción con poca luz y con las manos ocupadas. El contraste alto y el
+   objetivo grande no son adornos.
+
+   El color no se usa solo: cada estado lleva además su texto, para que la
+   pantalla siga siendo legible con daltonismo.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --fondo: #f7f6f3;
+  --superficie: #ffffff;
+  --texto: #1f2430;
+  --texto-suave: #5b6270;
+  --borde: #d9d5cd;
+
+  --primario: #2f5d50;
+  --primario-oscuro: #24483e;
+
+  --alerta: #8a3324;
+  --alerta-suave: #f6e7e3;
+  --pendiente: #7a5a12;
+  --pendiente-suave: #fbf1d8;
+  --ok: #2c5d2c;
+
+  --radio: 6px;
+  --sombra: 0 1px 2px rgb(31 36 48 / 8%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.25;
+}
+
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; }
+
+a {
+  color: var(--primario);
+}
+
+/* --- Estructura --------------------------------------------------------- */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--sombra);
+}
+
+.contenido {
+  max-width: 70rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* --- Tablas ------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--borde);
+  vertical-align: top;
+}
+
+th {
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+tbody tr:hover {
+  background: var(--fondo);
+}
+
+/* --- Botones ------------------------------------------------------------ */
+
+button,
+.boton {
+  font: inherit;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radio);
+  border: 1px solid var(--primario);
+  background: var(--primario);
+  color: #fff;
+  cursor: pointer;
+  min-height: 2.5rem;
+}
+
+button:hover:not(:disabled) {
+  background: var(--primario-oscuro);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button.secundario {
+  background: transparent;
+  color: var(--primario);
+}
+
+button.peligro {
+  background: var(--alerta);
+  border-color: var(--alerta);
+}
+
+/* --- Formularios -------------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+  margin-bottom: 0.2rem;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  min-height: 2.5rem;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid #c9a227;
+  outline-offset: 1px;
+}
+
+/* --- Avisos -------------------------------------------------------------
+   Cada estado lleva su texto al lado. El color solo no comunica. */
+
+.aviso {
+  border-left: 4px solid var(--primario);
+  background: var(--superficie);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radio);
+  margin-bottom: 1rem;
+}
+
+.aviso.pendiente {
+  border-left-color: var(--pendiente);
+  background: var(--pendiente-suave);
+}
+
+.aviso.alerta {
+  border-left-color: var(--alerta);
+  background: var(--alerta-suave);
+}
+
+.aviso p {
+  margin: 0.2rem 0;
+}
+
+.titulo-aviso {
+  font-weight: 600;
+}
+
+/* --- Utilidades --------------------------------------------------------- */
+
+.tenue {
+  color: var(--texto-suave);
+}
+
+.chico {
+  font-size: 0.85rem;
+}
+
+.solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.sin-datos {
+  color: var(--texto-suave);
+  font-style: italic;
+  padding: 1rem 0;
+}
+
+.fila {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.entre {
+  justify-content: space-between;
+}
+
+.rejilla {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}

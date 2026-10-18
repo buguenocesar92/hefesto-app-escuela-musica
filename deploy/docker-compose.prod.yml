@@ -1,0 +1,278 @@
+# ---------------------------------------------------------------------------
+# Composición de PRODUCCIÓN
+# ---------------------------------------------------------------------------
+# ADVERTENCIA HONESTA: este archivo NO se probó. En el entorno donde se escribió
+# el código no había Docker. Ver docs/10-PRUEBAS-Y-ESTADO.md.
+#
+# LO ÚNICO QUE PUBLICA PUERTOS ES EL PROXY
+# -----------------------------------------
+# En producción NINGÚN otro servicio declara `ports:`. PostgreSQL (5432),
+# Redis (6379) y la API (8080) quedan accesibles solo dentro de la red de
+# Docker.
+#
+# Esta es la diferencia entre este archivo y el de desarrollo, y es a propósito:
+# copiar la sección de puertos del archivo de desarrollo a este es el error que
+# deja una base de datos alcanzable desde internet. Por eso aquí no hay ningún
+# `ports:` fuera del proxy.
+#
+# CÓMO SE ACCEDE A LA BASE DESDE EL HOST
+# ---------------------------------------
+# No se accede. Para una consola de PostgreSQL se usa:
+#   docker compose -f docker-compose.prod.yml exec postgres psql -U escuela_musica_app -d escuela_musica
+# ---------------------------------------------------------------------------
+
+name: escuela-musica
+
+services:
+
+  # -------------------------------------------------------------------------
+  # Base de datos
+  # -------------------------------------------------------------------------
+  # DOS ROLES, Y NO UNO
+  # -------------------
+  # `POSTGRES_USER` es el rol de ARRANQUE: la imagen oficial ejecuta
+  # `initdb --username="$POSTGRES_USER"` y ese rol nace superusuario. Solo
+  # se usa para crear la base y para las tareas administrativas. La
+  # aplicacion NUNCA conecta con el.
+  #
+  # El rol de la aplicacion (`DB_USERNAME`) lo crea
+  # `deploy/postgres/inicializar-rol.sh` al inicializar el volumen, con
+  # NOSUPERUSER y NOBYPASSRLS explicitos. Le da la propiedad de la base
+  # para que las migraciones de Laravel puedan crear el esquema.
+  #
+  # POR QUE IMPORTA: la documentacion de PostgreSQL 18 dice que los
+  # superusuarios "always bypass the row security system", y que
+  # `FORCE ROW LEVEL SECURITY` sujeta solo al DUENO de la tabla, no al
+  # superusuario. Con un solo rol las politicas no se aplicarian y el
+  # aislamiento entre empresas seria decorativo. Ver docs/03.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-escuela_musica}
+      POSTGRES_USER: ${DB_ADMIN_USERNAME:-escuela_musica_admin}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?falta DB_ADMIN_PASSWORD en el .env.prod}
+      LANG: es_CL.UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=es-CL"
+      # Rol con el que conecta la aplicacion. Lo crea el script de arranque.
+      APP_DB_ROLE: ${DB_USERNAME:-escuela_musica_app}
+      APP_DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD en el archivo .env.prod de la raíz}
+    volumes:
+      - postgres_datos:/var/lib/postgresql/data
+      - ./postgres/inicializar-rol.sh:/docker-entrypoint-initdb.d/inicializar-rol.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-escuela_musica_app} -d ${DB_DATABASE:-escuela_musica}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # Caché y cola
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # API
+  # -------------------------------------------------------------------------
+  api:
+    image: ${REGISTRO:-hefestostudio}/escuela-musica-api:${VERSION:-ultima}
+    build:
+      context: ../api
+      dockerfile: ../deploy/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?defina APP_KEY en el archivo .env.prod de la raíz}
+      APP_URL: https://${DOMINIO:?defina DOMINIO en el archivo .env.prod de la raíz}
+      APP_TIMEZONE: America/Santiago
+
+      LOG_CHANNEL: daily
+      LOG_LEVEL: info
+
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-escuela_musica}
+      DB_USERNAME: ${DB_USERNAME:-escuela_musica_app}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD en el archivo .env.prod de la raíz}
+      DB_SSLMODE: prefer
+
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+
+      SESSION_DRIVER: file
+      # En producción la cookie exige HTTPS: el proxy termina TLS.
+      SESSION_SECURE_COOKIE: "true"
+      SESSION_SAME_SITE: Lax
+
+      AUTHENTIK_BASE_URL: ${AUTHENTIK_BASE_URL:?defina AUTHENTIK_BASE_URL en el archivo .env.prod de la raíz}
+      AUTHENTIK_ISSUER: ${AUTHENTIK_ISSUER:-}
+      AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:?defina AUTHENTIK_CLIENT_ID en el archivo .env.prod de la raíz}
+      AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:?defina AUTHENTIK_CLIENT_SECRET en el archivo .env.prod de la raíz}
+      AUTHENTIK_REDIRECT_URI: ${AUTHENTIK_REDIRECT_URI:?defina AUTHENTIK_REDIRECT_URI en el archivo .env.prod de la raíz}
+      # En producción la verificación de firma no se puede apagar.
+      AUTHENTIK_VERIFICAR_FIRMA: "true"
+
+      # Las tres reglas de negocio se pasan VACÍAS a propósito. El sistema
+      # funciona igual: registra la asistencia, no consume nada y muestra la
+      # deuda sin fecha. La escuela las configura cuando las decida.
+      ESCUELA_MUSICA_ABSENCIA_CONSUME_PLAN: ${ESCUELA_MUSICA_ABSENCIA_CONSUME_PLAN:-}
+      ESCUELA_MUSICA_DIAS_RECUPERACION: ${ESCUELA_MUSICA_DIAS_RECUPERACION:-}
+      ESCUELA_MUSICA_DIAS_AVISO_MOROSIDAD: ${ESCUELA_MUSICA_DIAS_AVISO_MOROSIDAD:-}
+      ESCUELA_MUSICA_ROLES_QUE_VEN_PAGOS: ${ESCUELA_MUSICA_ROLES_QUE_VEN_PAGOS:-direccion,administracion}
+      ESCUELA_MUSICA_EXIGIR_AUTORIZACION: ${ESCUELA_MUSICA_EXIGIR_AUTORIZACION:-true}
+      ESCUELA_MUSICA_RETENCION_BITACORA_HORAS: ${ESCUELA_MUSICA_RETENCION_BITACORA_HORAS:-8760}
+    volumes:
+      - api_storage:/var/www/html/storage
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # Trabajos en segundo plano
+  # -------------------------------------------------------------------------
+  cola:
+    image: ${REGISTRO:-hefestostudio}/escuela-musica-api:${VERSION:-ultima}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?defina APP_KEY en el archivo .env.prod de la raíz}
+      APP_TIMEZONE: America/Santiago
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-escuela_musica}
+      DB_USERNAME: ${DB_USERNAME:-escuela_musica_app}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD en el archivo .env.prod de la raíz}
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SESSION_DRIVER: file
+      ESCUELA_MUSICA_DIAS_RECUPERACION: ${ESCUELA_MUSICA_DIAS_RECUPERACION:-}
+      ESCUELA_MUSICA_RETENCION_BITACORA_HORAS: ${ESCUELA_MUSICA_RETENCION_BITACORA_HORAS:-8760}
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    volumes:
+      - api_storage:/var/www/html/storage
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # Programador de tareas
+  # -------------------------------------------------------------------------
+  planificador:
+    image: ${REGISTRO:-hefestostudio}/escuela-musica-api:${VERSION:-ultima}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:?defina APP_KEY en el archivo .env.prod de la raíz}
+      APP_TIMEZONE: America/Santiago
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE:-escuela_musica}
+      DB_USERNAME: ${DB_USERNAME:-escuela_musica_app}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD en el archivo .env.prod de la raíz}
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ESCUELA_MUSICA_DIAS_RECUPERACION: ${ESCUELA_MUSICA_DIAS_RECUPERACION:-}
+      ESCUELA_MUSICA_RETENCION_BITACORA_HORAS: ${ESCUELA_MUSICA_RETENCION_BITACORA_HORAS:-8760}
+    command: ["php", "artisan", "schedule:work"]
+    volumes:
+      - api_storage:/var/www/html/storage
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # Interfaz
+  # -------------------------------------------------------------------------
+  web:
+    image: ${REGISTRO:-hefestostudio}/escuela-musica-web:${VERSION:-ultima}
+    build:
+      context: ../web
+      dockerfile: ../deploy/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NUXT_API_BASE: http://api:8080
+      NUXT_PUBLIC_BASE: https://${DOMINIO:?defina DOMINIO en el archivo .env.prod de la raíz}
+      NUXT_TELEMETRY_DISABLED: "1"
+    networks:
+      - interna
+
+  # -------------------------------------------------------------------------
+  # Proxy: el ÚNICO servicio con puertos publicados
+  # -------------------------------------------------------------------------
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO en el archivo .env.prod de la raíz}
+      ACME_CORREO: ${ACME_CORREO:?defina ACME_CORREO en el archivo .env.prod de la raíz}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Los certificados tienen que sobrevivir a un reinicio: sin este volumen
+      # el proxy pide un certificado nuevo en cada arranque y se chocan los
+      # límites de emisión.
+      - caddy_datos:/data
+      - caddy_configuracion:/config
+    networks:
+      - interna
+
+volumes:
+  postgres_datos:
+  api_storage:
+  caddy_datos:
+  caddy_configuracion:
+
+networks:
+  # Una sola red interna, y NO con `internal: true`.
+  #
+  # Poner `internal: true` sería más estricto, pero rompe dos cosas que sí
+  # hacen falta:
+  #
+  #   1. La API llama a Authentik, que vive en otro proyecto de Docker. Sin salida
+  #      a la red externa, el ingreso no funciona.
+  #   2. El proxy tiene que salir a internet para obtener el certificado TLS.
+  #
+  # La protección real NO está en la red: está en que ningún servicio declara
+  # `ports:`. Lo que no se publica no se alcanza desde internet, y eso se sostiene
+  # en que este archivo no tenga un solo `ports:` fuera del proxy.
+  interna:
